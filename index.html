@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>BOOM</title>
+
+<style>
+*{box-sizing:border-box;font-family:Arial,sans-serif;font-weight:bold}
+body{margin:0;background:#f4f6ff;font-size:22px}
+
+/* HEADER */
+.header{display:flex;align-items:center;padding:20px;background:#fff;gap:20px}
+.avatar{width:80px;height:80px;border-radius:50%;background:#ddd}
+.menu-back{display:none;background:#eef1ff;padding:30px 46px;border-radius:30px;font-size:32px;cursor:pointer}
+.balance{margin-left:auto;display:flex;align-items:center;background:#eef1ff;padding:30px 44px;border-radius:36px;font-size:38px}
+.coin-icon{width:60px;height:60px;margin-right:14px}
+
+/* MENU */
+.menu{padding:28px}
+.bomb-btn{
+  width:100%;height:25vh;position:relative;
+  border:5px solid #4c6fff;border-radius:36px;
+  overflow:hidden;cursor:pointer;background:#000
+}
+.bomb-btn img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bomb-btn span{position:relative;z-index:2;font-size:96px;color:#fff}
+
+/* GAME */
+.game{display:none;padding:26px}
+.win-info{text-align:center;font-size:48px;margin-bottom:20px}
+.next-info{font-size:32px;opacity:.85}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.cell{
+  aspect-ratio:1/1;background:#fff;border-radius:22px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer
+}
+.cell img{width:92%;height:92%}
+.cell.boom{animation:shake .35s}
+
+/* CONTROLS */
+.controls{margin-top:20px}
+.bet-row{display:flex;gap:16px;margin-bottom:20px}
+.bet-row input{
+  flex:1;font-size:36px;padding:20px;
+  border-radius:20px;border:none;text-align:center
+}
+.bet-row button{
+  font-size:32px;padding:20px 26px;border-radius:20px;border:none
+}
+
+/* BIG SLIDER */
+.slider{text-align:center;font-size:32px;margin-bottom:26px}
+.slider input[type=range]{
+  width:90%;
+  height:14px;
+  margin-top:16px;
+  transform:scaleY(1.8);
+}
+
+/* BUTTONS */
+.play-btn,.cashout-btn{
+  width:100%;font-size:36px;padding:26px;
+  border:none;border-radius:26px;margin-top:16px
+}
+.play-btn{background:#4c6fff;color:#fff}
+.play-btn.disabled{
+  background:#9aa4d6;
+  opacity:.6;
+  pointer-events:none;
+}
+.cashout-btn{background:#22c55e;color:#fff}
+
+@keyframes shake{
+  0%{transform:translateX(0)}
+  25%{transform:translateX(-6px)}
+  50%{transform:translateX(6px)}
+  75%{transform:translateX(-6px)}
+  100%{transform:translateX(0)}
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  <div class="avatar"></div>
+  <div class="menu-back" id="menuBack" onclick="backToMenu()">в меню 🎰</div>
+  <div class="balance">
+    <img src="coin.png" class="coin-icon">
+    <span id="balance">1000.00</span>
+  </div>
+</div>
+
+<div class="menu" id="menu">
+  <button class="bomb-btn" onclick="startBoom()">
+    <img src="boom-icon.png">
+    <span>BOOM</span>
+  </button>
+</div>
+
+<div class="game" id="game">
+  <div class="win-info">
+    Возможный выигрыш<br>
+    <span id="possibleWin">0.00</span><br>
+    x<span id="multiplier">1.00</span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="controls">
+    <div class="bet-row">
+      <button onclick="halfBet()">½</button>
+      <input id="bet" type="number" value="1" min="1">
+      <button onclick="doubleBet()">2×</button>
+    </div>
+
+    <div class="slider">
+      Бомб: <span id="bombCount">3</span><br>
+      <input type="range" min="1" max="10" value="3" oninput="setBombs(this.value)">
+    </div>
+
+    <button class="play-btn" id="playBtn" onclick="play()">Играть</button>
+    <button class="cashout-btn" id="cashoutBtn" onclick="cashOut()" style="display:none">
+      Забрать выигрыш
+    </button>
+  </div>
+</div>
+
+<script>
+const multiplierTable={
+  1:{base:[1.02],step:.05},
+  2:{base:[1.09,1.28],step:.35},
+  3:{base:[1.14,1.3,1.43],step:.8},
+  4:{base:[1.19,1.43],step:3},
+  5:{base:[1.25],step:7},
+  6:{base:[1.32],step:8},
+  7:{base:[1.39],step:3.3},
+  8:{base:[1.47],step:12},
+  9:{base:[1.56],step:15},
+  10:{base:[1.67],step:21}
+};
+
+let balance=1000,betValue=1,playing=false,opened=0,multiplier=1;
+let bombs=[],bombsCount=3;
+
+const grid=document.getElementById('grid');
+const balanceEl=document.getElementById('balance');
+const betEl=document.getElementById('bet');
+const possibleWin=document.getElementById('possibleWin');
+const multiplierEl=document.getElementById('multiplier');
+const cashoutBtn=document.getElementById('cashoutBtn');
+const playBtn=document.getElementById('playBtn');
+
+function startBoom(){
+  menu.style.display='none';
+  game.style.display='block';
+  menuBack.style.display='block';
+  play();
+}
+function backToMenu(){
+  menu.style.display='block';
+  game.style.display='none';
+  menuBack.style.display='none';
+}
+
+function setBombs(v){
+  bombsCount=+v;
+  bombCount.innerText=v;
+}
+
+function halfBet(){
+  betEl.value=Math.max(1,Math.floor(betEl.value/2));
+}
+function doubleBet(){
+  betEl.value=Math.min(balance,betEl.value*2);
+}
+
+function play(){
+  if(playing) return;
+
+  betValue=Math.min(balance,Math.max(1,+betEl.value));
+  if(balance<betValue) return;
+
+  balance-=betValue;
+  balanceEl.innerText=balance.toFixed(2);
+
+  grid.innerHTML='';
+  opened=0;
+  multiplier=1;
+  playing=true;
+  bombs=[];
+  cashoutBtn.style.display='none';
+  playBtn.classList.add('disabled');
+
+  while(bombs.length<bombsCount){
+    const r=Math.floor(Math.random()*25);
+    if(!bombs.includes(r)) bombs.push(r);
+  }
+
+  for(let i=0;i<25;i++){
+    const c=document.createElement('div');
+    c.className='cell';
+    c.onclick=()=>openCell(c,i);
+    grid.appendChild(c);
+  }
+  updateWin();
+}
+
+function updateMultiplier(){
+  const t=multiplierTable[bombsCount];
+  const i=opened-1;
+  multiplier=i<t.base.length?t.base[i]:t.base.at(-1)+t.step*(i-t.base.length+1);
+}
+
+function updateWin(){
+  multiplierEl.innerText=multiplier.toFixed(2);
+  possibleWin.innerText=(betValue*multiplier).toFixed(2);
+}
+
+function openCell(c,i){
+  if(!playing||c.innerHTML)return;
+
+  if(bombs.includes(i)){
+    c.classList.add('boom');
+    const img=document.createElement('img');
+    img.src='bomb.png';
+    c.appendChild(img);
+    playing=false;
+    playBtn.classList.remove('disabled');
+    cashoutBtn.style.display='none';
+    return;
+  }
+
+  opened++;
+  updateMultiplier();
+
+  const img=document.createElement('img');
+  img.src='coin.png';
+  c.appendChild(img);
+
+  cashoutBtn.style.display='block';
+  updateWin();
+}
+
+function cashOut(){
+  balance+=betValue*multiplier;
+  balanceEl.innerText=balance.toFixed(2);
+  playing=false;
+  playBtn.classList.remove('disabled');
+  cashoutBtn.style.display='none';
+}
+</script>
+
+</body>
+</html>
